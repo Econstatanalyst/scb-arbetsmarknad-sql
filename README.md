@@ -1,0 +1,2 @@
+# scb-arbetsmarknad-sql
+arbetsmarknadsstatistik
