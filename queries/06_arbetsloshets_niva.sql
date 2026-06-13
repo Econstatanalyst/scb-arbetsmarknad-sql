@@ -1,31 +1,45 @@
 -- Classifies each year as low/medium/high unemployment
+-- Based on the unemployment RATE (%) rather than absolute numbers
 -- Thresholds are defined as mean +/- 1 standard deviation
--- Uses CTEs and CASE WHEN to demonstrate advanced SQL concepts
+-- Uses CTEs, JOIN, and CASE WHEN
 -- Source: SCB AKU 2001-2025
 
 WITH medel AS (
-    SELECT AVG(antal_tusental) AS m
-    FROM arbetslosa
-    WHERE kon = 'totalt'
-    AND arbetskraftstillhorighet LIKE 'arbetsl%'
+    SELECT AVG(ROUND(a.antal_tusental / (a.antal_tusental + s.antal_tusental) * 100, 1)) AS m
+    FROM arbetslosa a
+    JOIN sysselsatta s
+        ON a.ar = s.ar
+        AND a.kon = s.kon
+    WHERE a.kon = 'totalt'
+    AND a.arbetskraftstillhorighet LIKE 'arbetsl%'
+    AND s.anknytningsgrad LIKE 'syssel%'
 ),
 stats AS (
-    SELECT 
+    SELECT
         m,
-        SQRT(SUM((antal_tusental - m) * (antal_tusental - m)) / COUNT(*)) AS stddev
-    FROM arbetslosa, medel
-    WHERE kon = 'totalt'
-    AND arbetskraftstillhorighet LIKE 'arbetsl%'
+        SQRT(SUM((ROUND(a.antal_tusental / (a.antal_tusental + s.antal_tusental) * 100, 1) - m) *
+                 (ROUND(a.antal_tusental / (a.antal_tusental + s.antal_tusental) * 100, 1) - m)) / COUNT(*)) AS stddev
+    FROM arbetslosa a
+    JOIN sysselsatta s
+        ON a.ar = s.ar
+        AND a.kon = s.kon, medel
+    WHERE a.kon = 'totalt'
+    AND a.arbetskraftstillhorighet LIKE 'arbetsl%'
+    AND s.anknytningsgrad LIKE 'syssel%'
 )
-SELECT 
+SELECT
     a.ar,
-    a.antal_tusental AS arbetslosa,
-    CASE 
-        WHEN a.antal_tusental < (m - stddev) THEN 'lag'
-        WHEN a.antal_tusental > (m + stddev) THEN 'hog'
+    ROUND(a.antal_tusental / (a.antal_tusental + s.antal_tusental) * 100, 1) AS arbetsloshetsgrad,
+    CASE
+        WHEN ROUND(a.antal_tusental / (a.antal_tusental + s.antal_tusental) * 100, 1) < (m - stddev) THEN 'lag'
+        WHEN ROUND(a.antal_tusental / (a.antal_tusental + s.antal_tusental) * 100, 1) > (m + stddev) THEN 'hog'
         ELSE 'medel'
     END AS niva
-FROM arbetslosa a, stats
+FROM arbetslosa a
+JOIN sysselsatta s
+    ON a.ar = s.ar
+    AND a.kon = s.kon, stats
 WHERE a.kon = 'totalt'
 AND a.arbetskraftstillhorighet LIKE 'arbetsl%'
+AND s.anknytningsgrad LIKE 'syssel%'
 ORDER BY a.ar;
